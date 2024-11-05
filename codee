@@ -1,0 +1,111 @@
+# Import necessary libraries
+from googleapiclient.discovery import build
+from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
+import matplotlib.pyplot as plt
+
+# Constants for YouTube API
+API_KEY = 'AIzaSyAKGavPS8SDNq2LfY_fdOGRl6d_1B-AabQ'
+VIDEO_ID = '9TohDsmT8tA'
+
+# Set up the YouTube API client
+youtube = build('youtube', 'v3', developerKey=API_KEY)
+
+# Initialize Sentiment Analyzer
+sia_obj = SentimentIntensityAnalyzer()
+
+# Function to fetch comments for a given video
+def fetch_comments(video_id):
+    comments_data = []
+    next_page_token = None
+
+    while True:
+        try:
+            # Fetch comment threads
+            comments_response = youtube.commentThreads().list(
+                part='snippet',
+                videoId=video_id,
+                maxResults=100,
+                pageToken=next_page_token
+            ).execute()
+
+            # Collect each comment and its like count
+            for item in comments_response['items']:
+                comment = item['snippet']['topLevelComment']['snippet']['textDisplay']
+                like_count = item['snippet']['topLevelComment']['snippet']['likeCount']
+                comments_data.append({'comment': comment, 'like_count': like_count})
+
+            # Check for more pages of comments
+            next_page_token = comments_response.get('nextPageToken')
+            if not next_page_token:
+                break
+        except Exception as e:
+            print("Error fetching comments:", e)
+            break
+
+    return comments_data
+
+# Function to analyze sentiment of a comment
+def sentiment_scores(sentence):
+    sentiment_dict = sia_obj.polarity_scores(sentence)
+    return sentiment_dict
+
+# Function to process comments and calculate sentiment counts
+def analyze_comments(comments_data):
+    positive_comments = 0
+    negative_comments = 0
+    neutral_comments = 0
+    total_likes = 0
+
+    for idx, comment_info in enumerate(comments_data, start=1):
+        comment = comment_info['comment']
+        like_count = comment_info['like_count']
+        sentiment_dict = sentiment_scores(comment)
+        total_likes += like_count
+
+        # Determine sentiment category
+        if sentiment_dict['compound'] >= 0.05:
+            sentiment = "Positive"
+            positive_comments += 1
+        elif sentiment_dict['compound'] <= -0.05:
+            sentiment = "Negative"
+            negative_comments += 1
+        else:
+            sentiment = "Neutral"
+            neutral_comments += 1
+
+        # Print comment with sentiment information
+        print(f"{idx}. Comment: {comment}")
+        print(f"   Likes: {like_count}")
+        print(f"   Sentiment: {sentiment}")
+        print()
+
+    # Calculate percentages
+    total_comments = len(comments_data)
+    positive_percentage = (positive_comments / total_comments) * 100
+    negative_percentage = (negative_comments / total_comments) * 100
+    neutral_percentage = (neutral_comments / total_comments) * 100
+
+    # Display overall sentiment results
+    print('Total Comments:', total_comments)
+    print('Total Likes:', total_likes)
+    print(f'Positive Comments: {positive_comments} ({positive_percentage:.2f}%)')
+    print(f'Negative Comments: {negative_comments} ({negative_percentage:.2f}%)')
+    print(f'Neutral Comments: {neutral_comments} ({neutral_percentage:.2f}%)')
+
+    return positive_percentage, negative_percentage, neutral_percentage
+
+# Function to plot sentiment analysis results
+def plot_sentiment_analysis(positive_percentage, negative_percentage, neutral_percentage):
+    categories = ['Positive', 'Negative', 'Neutral']
+    percentages = [positive_percentage, negative_percentage, neutral_percentage]
+
+    plt.bar(categories, percentages, color=['green', 'red', 'blue'])
+    plt.xlabel('Sentiment Category')
+    plt.ylabel('Percentage')
+    plt.title('Sentiment Analysis of YouTube Video Comments')
+    plt.show()
+
+# Main Execution
+comments_data = fetch_comments(VIDEO_ID)
+positive_percentage, negative_percentage, neutral_percentage = analyze_comments(comments_data)
+plot_sentiment_analysis(positive_percentage, negative_percentage, neutral_percentage)
